@@ -1,0 +1,726 @@
+/**
+ * TMK BLOCK — GAME XẾP KHỐI GỖ
+ * js/main.js: Khởi tạo ứng dụng, quản lý màn hình, sự kiện kéo thả (Desktop & Mobile),
+ * chạm chọn - chạm đặt, kết nối giao diện với engine game và âm thanh.
+ */
+
+document.addEventListener('DOMContentLoaded', () => {
+    // ==========================================
+    // 1. CÁC PHẦN TỬ GIAO DIỆN CHÍNH (DOM ELEMENTS)
+    // ==========================================
+    const splashScreen = document.getElementById('splash-screen');
+    const gameScreen = document.getElementById('game-screen');
+    const btnStartGame = document.getElementById('btn-start-game');
+    const btnSplashResume = document.getElementById('btn-splash-resume');
+    const splashBestScore = document.getElementById('splash-best-score');
+    const btnHomeQuick = document.getElementById('btn-home-quick');
+
+    const currentScoreEl = document.getElementById('current-score');
+    const bestScoreEl = document.getElementById('best-score');
+    const comboBadge = document.getElementById('combo-badge');
+    const comboText = document.getElementById('combo-text');
+    const stageBadge = document.getElementById('stage-badge');
+    const stageText = document.getElementById('stage-text');
+
+    const gameBoardEl = document.getElementById('game-board');
+    const boardGhostOverlay = document.getElementById('board-ghost-overlay');
+    const piecesTrayEl = document.getElementById('pieces-tray');
+    const traySlots = [
+        document.getElementById('tray-slot-0'),
+        document.getElementById('tray-slot-1'),
+        document.getElementById('tray-slot-2')
+    ];
+
+    // Các nút điều khiển trên thanh tiêu đề
+    const btnToggleSound = document.getElementById('btn-toggle-sound');
+    const iconSoundOn = document.getElementById('icon-sound-on');
+    const iconSoundOff = document.getElementById('icon-sound-off');
+    const btnRestartGame = document.getElementById('btn-restart-game');
+    const btnOpenSettings = document.getElementById('btn-open-settings');
+
+    // Các Modal & Toast
+    const modalConfirmRestart = document.getElementById('modal-confirm-restart');
+    const btnConfirmRestartYes = document.getElementById('btn-confirm-restart-yes');
+    const btnConfirmRestartNo = document.getElementById('btn-confirm-restart-no');
+
+    const modalSettings = document.getElementById('modal-settings');
+    const btnCloseSettings = document.getElementById('btn-close-settings');
+    const btnSettingsCloseOk = document.getElementById('btn-settings-close-ok');
+    const settingSoundToggle = document.getElementById('setting-sound-toggle');
+
+    const modalGameover = document.getElementById('modal-gameover');
+    const gameoverIcon = document.getElementById('gameover-icon');
+    const newRecordAlert = document.getElementById('new-record-alert');
+    const finalScoreEl = document.getElementById('final-score');
+    const finalBestEl = document.getElementById('final-best');
+    const btnGameoverReplay = document.getElementById('btn-gameover-replay');
+    const btnGameoverHome = document.getElementById('btn-gameover-home');
+
+    const modalMilestone100k = document.getElementById('modal-milestone-100k');
+    const btnCloseMilestone = document.getElementById('btn-close-milestone');
+
+    const rescueToast = document.getElementById('rescue-toast');
+    const rescueDesc = document.getElementById('rescue-desc');
+
+    // ==========================================
+    // 2. TRẠNG THÁI TƯƠNG TÁC (INTERACTION STATE)
+    // ==========================================
+    let selectedSlotIndex = null; // Khối được chọn bằng thao tác chạm (Mobile/Click)
+    let isDragging = false;
+    let activeDragSlotIndex = null;
+    let draggedGhostEl = null;
+    let currentHoverCell = null; // { row, col }
+    let rescueToastTimer = null;
+
+    // ==========================================
+    // 3. KHỞI TẠO BÀN CỜ 8x8 TRÊN DOM
+    // ==========================================
+    const cellElements = []; // Ma trận phần tử DOM [r][c]
+
+    function initBoardDOM() {
+        gameBoardEl.innerHTML = '';
+        cellElements.length = 0;
+
+        for (let r = 0; r < BOARD_SIZE; r++) {
+            const rowEls = [];
+            for (let c = 0; c < BOARD_SIZE; c++) {
+                const cell = document.createElement('div');
+                cell.className = 'grid-cell';
+                cell.dataset.row = r;
+                cell.dataset.col = c;
+                gameBoardEl.appendChild(cell);
+                rowEls.push(cell);
+
+                // Hỗ trợ người dùng nhấp trực tiếp vào ô để đặt khối đã chọn
+                cell.addEventListener('click', () => handleCellClick(r, c));
+            }
+            cellElements.push(rowEls);
+        }
+    }
+
+    // ==========================================
+    // 4. CẬP NHẬT GIAO DIỆN BÀN CỜ & ĐIỂM
+    // ==========================================
+    function renderBoard(board) {
+        for (let r = 0; r < BOARD_SIZE; r++) {
+            for (let c = 0; c < BOARD_SIZE; c++) {
+                const cellData = board[r][c];
+                const cellEl = cellElements[r][c];
+                cellEl.innerHTML = '';
+                cellEl.classList.remove('ghost-valid');
+
+                if (cellData) {
+                    const tile = document.createElement('div');
+                    tile.className = 'wood-tile';
+                    if (cellData.theme && cellData.theme.bg) {
+                        tile.style.background = cellData.theme.bg;
+                    } else {
+                        tile.style.background = 'linear-gradient(135deg, #e4a853, #c27d28)';
+                    }
+                    cellEl.appendChild(tile);
+                }
+            }
+        }
+    }
+
+    function renderScores(score, combo, earned = 0) {
+        currentScoreEl.innerText = score.toLocaleString('vi-VN');
+        const best = window.tmkStorage.getBestScore();
+        bestScoreEl.innerText = best.toLocaleString('vi-VN');
+        splashBestScore.innerText = best.toLocaleString('vi-VN');
+
+        // Hiển thị huy hiệu Combo
+        if (combo > 1) {
+            comboBadge.classList.remove('hidden');
+            comboText.innerText = `COMBO x${combo}`;
+        } else {
+            comboBadge.classList.add('hidden');
+        }
+
+        // Cập nhật nhãn giai đoạn độ khó
+        if (score >= 100000) {
+            stageBadge.classList.add('hard-mode');
+            const step = Math.floor((score - 100000) / 50000) + 1;
+            stageText.innerText = `THỬ THÁCH 100K+ (CẤP ${step})`;
+        } else {
+            stageBadge.classList.remove('hard-mode');
+            stageText.innerText = 'GIAI ĐOẠN: THƯ THÁI';
+        }
+
+        // Hiệu ứng nảy nhẹ số điểm khi có điểm mới
+        if (earned > 0) {
+            currentScoreEl.style.transform = 'scale(1.25)';
+            setTimeout(() => {
+                currentScoreEl.style.transform = 'scale(1)';
+            }, 180);
+        }
+    }
+
+    // ==========================================
+    // 5. HIỂN THỊ KHAY 3 KHỐI LỰA CHỌN (TRAY)
+    // ==========================================
+    function renderTray(trayPieces) {
+        trayPieces.forEach((piece, slotIdx) => {
+            const slotEl = traySlots[slotIdx];
+            slotEl.innerHTML = '';
+            slotEl.classList.remove('selected', 'empty');
+
+            if (!piece || piece.used) {
+                slotEl.classList.add('empty');
+                if (selectedSlotIndex === slotIdx) {
+                    selectedSlotIndex = null;
+                }
+                return;
+            }
+
+            if (selectedSlotIndex === slotIdx) {
+                slotEl.classList.add('selected');
+            }
+
+            // Tạo khung hiển thị khối gỗ
+            const pieceView = document.createElement('div');
+            pieceView.className = 'piece-view';
+
+            // Kích thước ô trong khay (tự co giãn nếu khối lớn)
+            const maxDim = Math.max(piece.width, piece.height);
+            let tileSize = 24;
+            if (maxDim >= 4) tileSize = 17;
+            else if (maxDim === 3) tileSize = 20;
+
+            pieceView.style.gridTemplateColumns = `repeat(${piece.width}, ${tileSize}px)`;
+            pieceView.style.gridTemplateRows = `repeat(${piece.height}, ${tileSize}px)`;
+
+            // Tạo các ô con
+            for (let r = 0; r < piece.height; r++) {
+                for (let c = 0; c < piece.width; c++) {
+                    const isOccupied = piece.coords.some(([x, y]) => x === c && y === r);
+                    const tile = document.createElement('div');
+                    if (isOccupied) {
+                        tile.className = 'preview-tile';
+                        tile.style.background = piece.theme.bg;
+                    } else {
+                        tile.style.visibility = 'hidden';
+                    }
+                    pieceView.appendChild(tile);
+                }
+            }
+
+            slotEl.appendChild(pieceView);
+        });
+    }
+
+    // ==========================================
+    // 6. XỬ LÝ KÉO THẢ (DRAG & DROP - MOUSE & TOUCH)
+    // ==========================================
+    function startDrag(slotIdx, clientX, clientY) {
+        const piece = window.tmkGame.trayPieces[slotIdx];
+        if (!piece || piece.used) return;
+
+        isDragging = true;
+        activeDragSlotIndex = slotIdx;
+        selectedSlotIndex = slotIdx;
+        renderTray(window.tmkGame.trayPieces);
+
+        window.tmkEffects.playTap();
+
+        // Tạo phần tử Ghost bay theo con trỏ chuột/ngón tay
+        if (draggedGhostEl) {
+            document.body.removeChild(draggedGhostEl);
+            draggedGhostEl = null;
+        }
+
+        draggedGhostEl = document.createElement('div');
+        draggedGhostEl.className = 'dragged-piece-ghost';
+
+        // Lấy kích thước tương đương với kích thước thực trên bàn cờ để người chơi dễ căn chỉnh
+        const boardRect = gameBoardEl.getBoundingClientRect();
+        const cellSize = (boardRect.width - 16 - 7 * 4) / 8; // Kích thước xấp xỉ 1 ô trên bàn cờ
+
+        draggedGhostEl.style.gridTemplateColumns = `repeat(${piece.width}, ${cellSize}px)`;
+        draggedGhostEl.style.gridTemplateRows = `repeat(${piece.height}, ${cellSize}px)`;
+
+        for (let r = 0; r < piece.height; r++) {
+            for (let c = 0; c < piece.width; c++) {
+                const isOccupied = piece.coords.some(([x, y]) => x === c && y === r);
+                const tile = document.createElement('div');
+                if (isOccupied) {
+                    tile.className = 'preview-tile';
+                    tile.style.background = piece.theme.bg;
+                } else {
+                    tile.style.visibility = 'hidden';
+                }
+                draggedGhostEl.appendChild(tile);
+            }
+        }
+
+        document.body.appendChild(draggedGhostEl);
+        updateGhostPosition(clientX, clientY);
+    }
+
+    function updateGhostPosition(clientX, clientY) {
+        if (!draggedGhostEl) return;
+        draggedGhostEl.style.left = `${clientX}px`;
+        // Trên điện thoại, nâng vị trí khối lên một chút để ngón tay không che khuất
+        const yOffset = ('ontouchstart' in window) ? 55 : 30;
+        draggedGhostEl.style.top = `${clientY - yOffset}px`;
+
+        // Tìm ô trên bàn cờ tương ứng với tâm khối
+        const targetCell = getCellUnderPoint(clientX, clientY - yOffset);
+        highlightPlacementGhost(targetCell);
+    }
+
+    function endDrag(clientX, clientY) {
+        if (!isDragging) return;
+        isDragging = false;
+
+        const slotIdx = activeDragSlotIndex;
+        activeDragSlotIndex = null;
+
+        if (draggedGhostEl) {
+            document.body.removeChild(draggedGhostEl);
+            draggedGhostEl = null;
+        }
+
+        clearPlacementGhost();
+
+        const yOffset = ('ontouchstart' in window) ? 55 : 30;
+        const targetCell = getCellUnderPoint(clientX, clientY - yOffset);
+
+        if (targetCell && slotIdx !== null) {
+            const piece = window.tmkGame.trayPieces[slotIdx];
+            if (piece && !piece.used) {
+                // Thử đặt khối với gốc tại vị trí con trỏ
+                const r = targetCell.row;
+                const c = targetCell.col;
+                const result = window.tmkGame.placePiece(piece, r, c);
+                if (result.success) {
+                    window.tmkEffects.playPlace();
+                    selectedSlotIndex = null;
+                    return;
+                }
+            }
+        }
+
+        // Nếu thả không hợp lệ hoặc ra ngoài, giữ nguyên trạng thái
+        renderTray(window.tmkGame.trayPieces);
+    }
+
+    function getCellUnderPoint(x, y) {
+        const target = document.elementFromPoint(x, y);
+        const cell = target?.closest('.grid-cell');
+
+        if (!cell || !gameBoardEl.contains(cell)) {
+            return null;
+        }
+
+        return {
+            row: Number(cell.dataset.row),
+            col: Number(cell.dataset.col)
+        };
+    }
+
+    function highlightPlacementGhost(targetCell) {
+        clearPlacementGhost();
+        if (!targetCell || activeDragSlotIndex === null) return;
+
+        const piece = window.tmkGame.trayPieces[activeDragSlotIndex];
+        if (!piece || piece.used) return;
+
+        const canPlace = window.tmkGame.canPlacePiece(piece, targetCell.row, targetCell.col);
+        if (canPlace) {
+            piece.coords.forEach(([dx, dy]) => {
+                const r = targetCell.row + dy;
+                const c = targetCell.col + dx;
+                if (r < BOARD_SIZE && c < BOARD_SIZE && cellElements[r] && cellElements[r][c]) {
+                    cellElements[r][c].classList.add('ghost-valid');
+                }
+            });
+        }
+    }
+
+    function clearPlacementGhost() {
+        for (let r = 0; r < BOARD_SIZE; r++) {
+            for (let c = 0; c < BOARD_SIZE; c++) {
+                cellElements[r][c].classList.remove('ghost-valid');
+            }
+        }
+    }
+
+    // ==========================================
+    // 7. THAO TÁC CHẠM CHỌN - CHẠM ĐẶT (TAP TO PLACE)
+    // ==========================================
+    function handleSlotClick(slotIdx) {
+        const piece = window.tmkGame.trayPieces[slotIdx];
+        if (!piece || piece.used) return;
+
+        window.tmkEffects.playTap();
+
+        if (selectedSlotIndex === slotIdx) {
+            // Nhấp lại vào khối đang chọn thì hủy chọn
+            selectedSlotIndex = null;
+        } else {
+            selectedSlotIndex = slotIdx;
+        }
+        renderTray(window.tmkGame.trayPieces);
+    }
+
+    function handleCellClick(row, col) {
+        if (selectedSlotIndex === null) return;
+
+        const piece = window.tmkGame.trayPieces[selectedSlotIndex];
+        if (!piece || piece.used) return;
+
+        // Thử đặt khối
+        const result = window.tmkGame.placePiece(piece, row, col);
+        if (result.success) {
+            window.tmkEffects.playPlace();
+            selectedSlotIndex = null;
+            renderTray(window.tmkGame.trayPieces);
+        } else {
+            // Phản hồi rung nhẹ khi đặt không hợp lệ
+            window.tmkEffects.playTap();
+            const cellEl = cellElements[row][col];
+            cellEl.style.backgroundColor = 'rgba(229, 62, 62, 0.4)';
+            setTimeout(() => {
+                cellEl.style.backgroundColor = '';
+            }, 200);
+        }
+    }
+
+    // Đăng ký sự kiện chuột và cảm ứng cho 3 khay khối
+    traySlots.forEach((slotEl, idx) => {
+        // Sự kiện chuột máy tính
+        slotEl.addEventListener('mousedown', (e) => {
+            if (e.button !== 0) return; // Chỉ nhận chuột trái
+            startDrag(idx, e.clientX, e.clientY);
+        });
+
+        // Sự kiện chạm điện thoại
+        slotEl.addEventListener('touchstart', (e) => {
+            if (e.touches.length > 0) {
+                const touch = e.touches[0];
+                startDrag(idx, touch.clientX, touch.clientY);
+            }
+        }, { passive: false });
+
+        // Nhấp chạm chọn
+        slotEl.addEventListener('click', (e) => {
+            // Click chuột/chạm đã được xử lý bởi mousedown/touchstart.
+            // Chỉ giữ click không phát sinh từ con trỏ, ví dụ thao tác bàn phím.
+            if (e.detail === 0) {
+                handleSlotClick(idx);
+            }
+        });
+    });
+
+    // Sự kiện di chuyển toàn cục
+    window.addEventListener('mousemove', (e) => {
+        if (isDragging) {
+            e.preventDefault();
+            updateGhostPosition(e.clientX, e.clientY);
+        }
+    });
+
+    window.addEventListener('touchmove', (e) => {
+        if (isDragging && e.touches.length > 0) {
+            e.preventDefault(); // Ngăn cuộn trang khi đang kéo khối
+            const touch = e.touches[0];
+            updateGhostPosition(touch.clientX, touch.clientY);
+        }
+    }, { passive: false });
+
+    // Sự kiện nhả chuột / kết thúc chạm
+    window.addEventListener('mouseup', (e) => {
+        if (isDragging) {
+            endDrag(e.clientX, e.clientY);
+        }
+    });
+
+    window.addEventListener('touchend', (e) => {
+        if (isDragging) {
+            const touch = e.changedTouches[0];
+            endDrag(touch.clientX, touch.clientY);
+        }
+    });
+
+    window.addEventListener('touchcancel', () => {
+        if (!isDragging) return;
+
+        isDragging = false;
+        activeDragSlotIndex = null;
+
+        if (draggedGhostEl?.parentNode) {
+            draggedGhostEl.parentNode.removeChild(draggedGhostEl);
+        }
+        draggedGhostEl = null;
+
+        clearPlacementGhost();
+        renderTray(window.tmkGame.trayPieces);
+    });
+
+    // ==========================================
+    // 8. ĐĂNG KÝ HOOKS TỪ ENGINE GAME
+    // ==========================================
+    window.tmkGame.onBoardUpdate = (board) => {
+        renderBoard(board);
+    };
+
+    window.tmkGame.onScoreUpdate = (score, combo, earned) => {
+        renderScores(score, combo, earned);
+    };
+
+    window.tmkGame.onTrayUpdate = (trayPieces) => {
+        renderTray(trayPieces);
+    };
+
+    window.tmkGame.onLinesCleared = ({ linesCount, rows, cols, clearedCells, combo, scoreEarned }) => {
+        // 1. Âm thanh xóa hàng & combo
+        window.tmkEffects.playLineClear(linesCount, combo);
+
+        // 2. Rung màn hình bàn cờ
+        window.tmkEffects.shakeBoard(gameBoardEl, linesCount);
+
+        // 3. Animation phát sáng và nổ hạt gỗ trên từng ô bị xóa
+        const sparkPositions = [];
+        clearedCells.forEach(({ r, c, cellData }) => {
+            const cellEl = cellElements[r][c];
+            cellEl.classList.add('cell-clearing');
+
+            const rect = cellEl.getBoundingClientRect();
+            sparkPositions.push({
+                x: rect.left + rect.width / 2,
+                y: rect.top + rect.height / 2,
+                color: cellData?.theme?.border || '#e4a853'
+            });
+        });
+
+        window.tmkEffects.spawnWoodSparks(sparkPositions);
+
+        // 4. Hiển thị điểm bay + thông báo Combo
+        const boardRect = gameBoardEl.getBoundingClientRect();
+        const centerX = boardRect.left + boardRect.width / 2;
+        const centerY = boardRect.top + boardRect.height / 2;
+
+        const text = combo > 1 ? `+${scoreEarned} 🔥 COMBO x${combo}!` : `+${scoreEarned}`;
+        window.tmkEffects.showFloatingScore(centerX, centerY, text, combo > 1 ? 'combo' : 'normal');
+
+        // Animation phát sáng trên các ô được giải phóng
+        clearedCells.forEach(({ r, c }) => {
+            const cellEl = cellElements[r]?.[c];
+            if (!cellEl) return;
+
+            cellEl.classList.remove('cell-clearing');
+            cellEl.classList.add('cell-clearing');
+        });
+
+        setTimeout(() => {
+            clearedCells.forEach(({ r, c }) => {
+                cellElements[r]?.[c]?.classList.remove('cell-clearing');
+            });
+        }, 400);
+    };
+
+    // Khi đạt mốc 100.000 điểm
+    window.tmkGame.onMilestone100k = (score) => {
+        window.tmkEffects.playMilestone100k();
+        window.tmkEffects.triggerConfetti();
+        modalMilestone100k.classList.remove('hidden');
+    };
+
+    // Khi kích hoạt cơ chế cứu trợ
+    window.tmkGame.onRescueTriggered = ({ clearedCells, message }) => {
+        window.tmkEffects.playRescue();
+        rescueDesc.innerText = message;
+        rescueToast.classList.remove('hidden');
+
+        clearedCells.forEach(({ r, c }) => {
+            const cellEl = cellElements[r]?.[c];
+            if (!cellEl) return;
+
+            cellEl.classList.remove('cell-clearing');
+            cellEl.classList.add('cell-clearing');
+        });
+
+        // CSS animation kết thúc sau 380 ms.
+        // Gỡ class để ô trống hiện lại bình thường.
+        setTimeout(() => {
+            clearedCells.forEach(({ r, c }) => {
+                cellElements[r]?.[c]?.classList.remove('cell-clearing');
+            });
+        }, 400);
+
+        if (rescueToastTimer) clearTimeout(rescueToastTimer);
+        rescueToastTimer = setTimeout(() => {
+            rescueToast.classList.add('hidden');
+        }, 3600);
+    };
+    // Khi kết thúc ván chơi (Game Over)
+    window.tmkGame.onGameOver = ({ finalScore, bestScore, isNewRecord }) => {
+        window.tmkEffects.playGameOver();
+        finalScoreEl.innerText = finalScore.toLocaleString('vi-VN');
+        finalBestEl.innerText = bestScore.toLocaleString('vi-VN');
+
+        if (isNewRecord) {
+            newRecordAlert.classList.remove('hidden');
+            gameoverIcon.innerText = '👑';
+            window.tmkEffects.playHighScore();
+            window.tmkEffects.triggerConfetti();
+        } else {
+            newRecordAlert.classList.add('hidden');
+            gameoverIcon.innerText = '🪵';
+        }
+
+        modalGameover.classList.remove('hidden');
+    };
+
+    // ==========================================
+    // 9. ĐIỀU KHIỂN CHUYỂN MÀN HÌNH & NÚT BẤM
+    // ==========================================
+    function showScreen(screen) {
+        [splashScreen, gameScreen].forEach(s => s.classList.remove('active'));
+        screen.classList.add('active');
+    }
+
+    // Bắt đầu chơi từ màn hình chào
+    btnStartGame.addEventListener('click', () => {
+        window.tmkEffects.ensureAudioContext();
+        window.tmkEffects.playTap();
+        window.tmkGame.newGame();
+        showScreen(gameScreen);
+    });
+
+    btnSplashResume.addEventListener('click', () => {
+        window.tmkEffects.ensureAudioContext();
+        window.tmkEffects.playTap();
+        const saved = window.tmkStorage.getSavedGameState();
+        if (saved) {
+            window.tmkGame.restoreSavedGame(saved);
+        } else {
+            window.tmkGame.newGame();
+        }
+        showScreen(gameScreen);
+    });
+
+    // Quay lại màn hình chính khi nhấp vào logo mini
+    btnHomeQuick.addEventListener('click', () => {
+        window.tmkEffects.playTap();
+        window.tmkGame.saveState();
+        updateSplashButtons();
+        showScreen(splashScreen);
+    });
+
+    // Nút Chơi Lại (Yêu cầu xác nhận)
+    btnRestartGame.addEventListener('click', () => {
+        window.tmkEffects.playTap();
+        modalConfirmRestart.classList.remove('hidden');
+    });
+
+    btnConfirmRestartYes.addEventListener('click', () => {
+        window.tmkEffects.playTap();
+        modalConfirmRestart.classList.add('hidden');
+        window.tmkGame.newGame();
+    });
+
+    btnConfirmRestartNo.addEventListener('click', () => {
+        window.tmkEffects.playTap();
+        modalConfirmRestart.classList.add('hidden');
+    });
+
+    // Nút Bật/Tắt âm thanh
+    function updateSoundIcons(enabled) {
+        if (enabled) {
+            iconSoundOn.classList.remove('hidden');
+            iconSoundOff.classList.add('hidden');
+        } else {
+            iconSoundOn.classList.add('hidden');
+            iconSoundOff.classList.remove('hidden');
+        }
+        settingSoundToggle.checked = enabled;
+        window.tmkEffects.setSoundEnabled(enabled);
+        window.tmkStorage.saveSettings({ soundEnabled: enabled });
+    }
+
+    btnToggleSound.addEventListener('click', () => {
+        window.tmkEffects.ensureAudioContext();
+        const current = window.tmkEffects.soundEnabled;
+        updateSoundIcons(!current);
+        if (!current) window.tmkEffects.playTap();
+    });
+
+    settingSoundToggle.addEventListener('change', (e) => {
+        window.tmkEffects.ensureAudioContext();
+        updateSoundIcons(e.target.checked);
+        if (e.target.checked) window.tmkEffects.playTap();
+    });
+
+    // Modal Cài đặt
+    btnOpenSettings.addEventListener('click', () => {
+        window.tmkEffects.playTap();
+        modalSettings.classList.remove('hidden');
+    });
+
+    btnCloseSettings.addEventListener('click', () => {
+        window.tmkEffects.playTap();
+        modalSettings.classList.add('hidden');
+    });
+
+    btnSettingsCloseOk.addEventListener('click', () => {
+        window.tmkEffects.playTap();
+        modalSettings.classList.add('hidden');
+    });
+
+    // Modal Milestone 100k
+    btnCloseMilestone.addEventListener('click', () => {
+        window.tmkEffects.playTap();
+        modalMilestone100k.classList.add('hidden');
+    });
+
+    // Modal Game Over
+    btnGameoverReplay.addEventListener('click', () => {
+        window.tmkEffects.playTap();
+        modalGameover.classList.add('hidden');
+        window.tmkGame.newGame();
+    });
+
+    btnGameoverHome.addEventListener('click', () => {
+        window.tmkEffects.playTap();
+        modalGameover.classList.add('hidden');
+        updateSplashButtons();
+        showScreen(splashScreen);
+    });
+
+    // Cập nhật trạng thái nút Tiếp tục trên màn hình chào
+    function updateSplashButtons() {
+        const saved = window.tmkStorage.getSavedGameState();
+        if (saved && saved.score > 0) {
+            btnSplashResume.classList.remove('hidden');
+            btnStartGame.querySelector('.btn-text').innerText = 'CHƠI VÁN MỚI';
+        } else {
+            btnSplashResume.classList.add('hidden');
+            btnStartGame.querySelector('.btn-text').innerText = 'BẮT ĐẦU CHƠI';
+        }
+        const best = window.tmkStorage.getBestScore();
+        splashBestScore.innerText = best.toLocaleString('vi-VN');
+    }
+
+    // ==========================================
+    // 10. KHỞI CHẠY LẦN ĐẦU
+    // ==========================================
+    const settings = window.tmkStorage.getSettings();
+    updateSoundIcons(settings.soundEnabled);
+
+    initBoardDOM();
+    updateSplashButtons();
+
+    // Hỗ trợ phím tắt ESC để đóng modal
+    window.addEventListener('keydown', (e) => {
+        if (e.key === 'Escape') {
+            modalConfirmRestart.classList.add('hidden');
+            modalSettings.classList.add('hidden');
+            modalMilestone100k.classList.add('hidden');
+        }
+    });
+
+    console.log('%cTMK BLOCK%c — Game xếp khối gỗ đã sẵn sàng!', 'font-size: 16px; font-weight: bold; color: #f5b041;', 'color: #90a7c4;');
+});
+

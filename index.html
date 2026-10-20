@@ -1,0 +1,301 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <meta name="description" content="TMK BLOCK — Game xếp khối gỗ thư giãn và trí tuệ đỉnh cao. Giải trí, vượt thời gian.">
+    <meta name="theme-color" content="#091424">
+    <title>TMK BLOCK — Game Xếp Khối Gỗ</title>
+    <link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+    <!-- LỚP PHỦ HẠT VÀ HIỆU ỨNG (PARTICLES & CONFETTI) -->
+    <div id="particles-overlay" class="particles-overlay" aria-hidden="true"></div>
+
+    <!-- KHUNG ỨNG DỤNG CHÍNH -->
+    <div id="app-container" class="app-container">
+
+        <!-- ============================================== -->
+        <!-- 1. MÀN HÌNH MỞ ĐẦU (SPLASH / BRAND INTRO) -->
+        <!-- ============================================== -->
+        <section id="splash-screen" class="screen active splash-screen" aria-label="Màn hình giới thiệu TMK BLOCK">
+            <!-- Nền các khối gỗ trôi bồng bềnh -->
+            <div class="floating-blocks-bg" aria-hidden="true">
+                <div class="float-block fb-1"></div>
+                <div class="float-block fb-2"></div>
+                <div class="float-block fb-3"></div>
+                <div class="float-block fb-4"></div>
+                <div class="float-block fb-5"></div>
+                <div class="float-block fb-6"></div>
+            </div>
+
+            <div class="splash-content">
+                <!-- Biểu tượng Logo TMK BLOCK ghép từ các khối gỗ 3D -->
+                <div class="brand-logo-badge">
+                    <div class="logo-mosaic">
+                        <div class="mosaic-block mb-1"></div>
+                        <div class="mosaic-block mb-2"></div>
+                        <div class="mosaic-block mb-3"></div>
+                        <div class="mosaic-block mb-4"></div>
+                        <div class="mosaic-block mb-5"></div>
+                    </div>
+                </div>
+
+                <h1 class="brand-title">
+                    <span class="title-tmk">TMK</span>
+                    <span class="title-block">BLOCK</span>
+                </h1>
+                
+                <p class="brand-slogan">"Giải trí, vượt thời gian"</p>
+
+                <!-- Hiển thị Kỷ lục cá nhân tại màn hình bắt đầu -->
+                <div class="splash-record-card">
+                    <span class="record-icon" aria-hidden="true">🏆</span>
+                    <div class="record-info">
+                        <span class="record-label">KỶ LỤC CỦA BẠN</span>
+                        <span id="splash-best-score" class="record-score">0</span>
+                    </div>
+                </div>
+
+                <div class="splash-actions">
+                    <button id="btn-start-game" class="btn btn-primary btn-pulse" aria-label="Bắt đầu chơi game">
+                        <span class="btn-text">BẮT ĐẦU CHƠI</span>
+                        <svg class="btn-arrow" viewBox="0 0 24 24" width="22" height="22" fill="currentColor">
+                            <path d="M8 5v14l11-7z"/>
+                        </svg>
+                    </button>
+                    <button id="btn-splash-resume" class="btn btn-secondary hidden" aria-label="Tiếp tục ván chơi dở">
+                        <span class="btn-text">TIẾP TỤC VÁN CHƠI</span>
+                    </button>
+                </div>
+
+                <div class="splash-footer">
+                    <span class="badge-wood">Phong cách Gỗ Thượng Hạng</span>
+                    <span class="badge-offline">Chơi Mượt Offline 100%</span>
+                </div>
+            </div>
+        </section>
+
+        <!-- ============================================== -->
+        <!-- 2. GIAO DIỆN CHƠI CHÍNH (MAIN GAMEPLAY SCREEN) -->
+        <!-- ============================================== -->
+        <main id="game-screen" class="screen game-screen" aria-label="Bàn chơi TMK BLOCK">
+            <!-- Thanh tiêu đề điều khiển -->
+            <header class="game-header">
+                <div class="brand-mini" id="btn-home-quick" title="Trở về màn hình chính" role="button" tabindex="0">
+                    <div class="logo-mini-icon">
+                        <div class="lm-1"></div>
+                        <div class="lm-2"></div>
+                        <div class="lm-3"></div>
+                    </div>
+                    <span class="brand-mini-text">TMK <strong>BLOCK</strong></span>
+                </div>
+
+                <div class="header-actions">
+                    <!-- Nút bật tắt âm thanh -->
+                    <button id="btn-toggle-sound" class="btn-icon" aria-label="Bật/Tắt âm thanh" title="Âm thanh">
+                        <svg id="icon-sound-on" class="svg-icon" viewBox="0 0 24 24" width="22" height="22" fill="currentColor">
+                            <path d="M3 9v6h4l5 5V4L7 9H3zm13.5 3c0-1.77-1.02-3.29-2.5-4.03v8.05c1.48-.73 2.5-2.25 2.5-4.02zM14 3.23v2.06c2.89.86 5 3.54 5 6.71s-2.11 5.85-5 6.71v2.06c4.01-.91 7-4.49 7-8.77s-2.99-7.86-7-8.77z"/>
+                        </svg>
+                        <svg id="icon-sound-off" class="svg-icon hidden" viewBox="0 0 24 24" width="22" height="22" fill="currentColor">
+                            <path d="M16.5 12c0-1.77-1.02-3.29-2.5-4.03v2.21l2.45 2.45c.03-.2.05-.41.05-.63zm2.5 0c0 .94-.2 1.82-.54 2.64l1.51 1.51C20.63 14.91 21 13.5 21 12c0-4.28-2.99-7.86-7-8.77v2.06c2.89.86 5 3.54 5 6.71zM4.27 3L3 4.27 7.73 9H3v6h4l5 5v-6.73l4.25 4.25c-.67.52-1.42.93-2.25 1.18v2.06c1.38-.31 2.63-.95 3.69-1.81L19.73 21 21 19.73l-9-9L4.27 3zM12 4L9.91 6.09 12 8.18V4z"/>
+                        </svg>
+                    </button>
+
+                    <!-- Nút khởi động lại ván -->
+                    <button id="btn-restart-game" class="btn-icon" aria-label="Chơi lại ván mới" title="Ván mới">
+                        <svg class="svg-icon" viewBox="0 0 24 24" width="22" height="22" fill="currentColor">
+                            <path d="M17.65 6.35C16.2 4.9 14.21 4 12 4c-4.42 0-7.99 3.58-7.99 8s3.57 8 7.99 8c3.73 0 6.84-2.55 7.73-6h-2.08c-.82 2.33-3.04 4-5.65 4-3.31 0-6-2.69-6-6s2.69-6 6-6c1.66 0 3.14.69 4.22 1.78L13 11h7V4l-2.35 2.35z"/>
+                        </svg>
+                    </button>
+
+                    <!-- Nút hướng dẫn / cài đặt -->
+                    <button id="btn-open-settings" class="btn-icon" aria-label="Cài đặt & Hướng dẫn" title="Cài đặt">
+                        <svg class="svg-icon" viewBox="0 0 24 24" width="22" height="22" fill="currentColor">
+                            <path d="M19.14 12.94c.04-.3.06-.61.06-.94 0-.32-.02-.64-.07-.94l2.03-1.58c.18-.14.23-.41.12-.61l-1.92-3.32c-.12-.22-.37-.29-.59-.22l-2.39.96c-.5-.38-1.03-.7-1.62-.94l-.36-2.54c-.04-.24-.24-.41-.48-.41h-3.84c-.24 0-.43.17-.47.41l-.36 2.54c-.59.24-1.13.57-1.62.94l-2.39-.96c-.22-.08-.47 0-.59.22L2.74 8.87c-.12.21-.08.47.12.61l2.03 1.58c-.05.3-.09.63-.09.94s.02.64.07.94l-2.03 1.58c-.18.14-.23.41-.12.61l1.92 3.32c.12.22.37.29.59.22l2.39-.96c.5.38 1.03.7 1.62.94l.36 2.54c.05.24.24.41.48.41h3.84c.24 0 .44-.17.47-.41l.36-2.54c.59-.24 1.13-.56 1.62-.94l2.39.96c.22.08.47 0 .59-.22l1.92-3.32c.12-.22.07-.47-.12-.61l-2.01-1.58zM12 15.6c-1.98 0-3.6-1.62-3.6-3.6s1.62-3.6 3.6-3.6 3.6 1.62 3.6 3.6-1.62 3.6-3.6 3.6z"/>
+                        </svg>
+                    </button>
+                </div>
+            </header>
+
+            <!-- Khu vực bảng điểm & kỷ lục & trạng thái thử thách -->
+            <section class="scoreboard-section">
+                <!-- Điểm hiện tại -->
+                <div class="score-card main-score-card">
+                    <span class="score-label">ĐIỂM SỐ</span>
+                    <div class="score-number-wrap">
+                        <span id="current-score" class="score-number">0</span>
+                    </div>
+                </div>
+
+                <!-- Kỷ lục cá nhân -->
+                <div class="score-card best-score-card">
+                    <span class="score-label">
+                        <span class="mini-trophy">🏆</span> KỶ LỤC
+                    </span>
+                    <div class="score-number-wrap">
+                        <span id="best-score" class="score-number">0</span>
+                    </div>
+                </div>
+
+                <!-- Huy hiệu Combo & Giai đoạn -->
+                <div class="status-badges">
+                    <div id="combo-badge" class="badge combo-badge hidden">
+                        <span class="fire-icon">🔥</span>
+                        <span id="combo-text">COMBO x2</span>
+                    </div>
+                    <div id="stage-badge" class="badge stage-badge">
+                        <span id="stage-text">GIAI ĐOẠN: THƯ THÁI</span>
+                    </div>
+                </div>
+            </section>
+
+            <!-- BÀN CHƠI CHÍNH 8x8 (GRID) -->
+            <section class="board-wrapper">
+                <div id="game-board" class="game-board" role="grid" aria-label="Bàn cờ gỗ 8 nhân 8">
+                    <!-- 64 ô sẽ được tạo động bằng JavaScript -->
+                </div>
+
+                <!-- Lớp hiển thị xem trước vị trí đặt khối (Ghost preview overlay) -->
+                <div id="board-ghost-overlay" class="board-ghost-overlay" aria-hidden="true"></div>
+            </section>
+
+            <!-- KHAY CHỨA 3 KHỐI LỰA CHỌN (TRAY) -->
+            <section class="tray-section" aria-label="3 khối lựa chọn">
+                <div id="pieces-tray" class="pieces-tray">
+                    <div class="tray-slot" id="tray-slot-0" data-slot="0"></div>
+                    <div class="tray-slot" id="tray-slot-1" data-slot="1"></div>
+                    <div class="tray-slot" id="tray-slot-2" data-slot="2"></div>
+                </div>
+            </section>
+
+            <!-- Hướng dẫn nhanh & thông báo cứu trợ -->
+            <footer class="game-footer">
+                <p id="game-hint" class="game-hint">
+                    <span class="hint-desktop">💡 Kéo thả khối hoặc nhấp chọn rồi nhấp ô trên bàn cờ.</span>
+                    <span class="hint-mobile">👆 Chạm vào khối rồi chạm vị trí muốn đặt trên bàn.</span>
+                </p>
+            </footer>
+        </main>
+
+        <!-- ============================================== -->
+        <!-- 3. THÔNG BÁO CỨU TRỢ (RESCUE TOAST BANNER) -->
+        <!-- ============================================== -->
+        <div id="rescue-toast" class="rescue-toast hidden" role="alert">
+            <div class="rescue-icon">✨</div>
+            <div class="rescue-text">
+                <strong id="rescue-title">CỨU TRỢ TỰ ĐỘNG!</strong>
+                <p id="rescue-desc">Đã giải phóng 1 hàng khối để bạn tiếp tục lập kỷ lục.</p>
+            </div>
+        </div>
+
+        <!-- ============================================== -->
+        <!-- 4. HỘP THOẠI KẾT THÚC (GAME OVER MODAL) -->
+        <!-- ============================================== -->
+        <div id="modal-gameover" class="modal-backdrop hidden" role="dialog" aria-modal="true" aria-labelledby="gameover-title">
+            <div class="modal-card gameover-card">
+                <div class="gameover-trophy-wrap">
+                    <span id="gameover-icon" class="gameover-icon">🪵</span>
+                </div>
+                <h2 id="gameover-title" class="modal-title">KẾT THÚC LƯỢT CHƠI</h2>
+                <p id="new-record-alert" class="new-record-alert hidden">🎉 CHÚC MỪNG BẠN ĐÃ LẬP KỶ LỤC MỚI! 🎉</p>
+
+                <div class="gameover-stats">
+                    <div class="stat-box">
+                        <span class="stat-label">ĐIỂM VỪA ĐẠT</span>
+                        <span id="final-score" class="stat-val">0</span>
+                    </div>
+                    <div class="stat-box highlight">
+                        <span class="stat-label">KỶ LỤC CỦA BẠN</span>
+                        <span id="final-best" class="stat-val">0</span>
+                    </div>
+                </div>
+
+                <div class="modal-actions">
+                    <button id="btn-gameover-replay" class="btn btn-primary btn-pulse">
+                        <span class="btn-text">CHƠI LẠI</span>
+                    </button>
+                    <button id="btn-gameover-home" class="btn btn-secondary">
+                        <span class="btn-text">VỀ MÀN HÌNH CHÍNH</span>
+                    </button>
+                </div>
+            </div>
+        </div>
+
+        <!-- ============================================== -->
+        <!-- 5. HỘP THOẠI XÁC NHẬN CHƠI LẠI (CONFIRM RESTART) -->
+        <!-- ============================================== -->
+        <div id="modal-confirm-restart" class="modal-backdrop hidden" role="dialog" aria-modal="true">
+            <div class="modal-card">
+                <h3 class="modal-title">Bắt Đầu Lượt Mới?</h3>
+                <p class="modal-desc">Ván chơi hiện tại sẽ kết thúc và điểm sẽ tính từ đầu. Kỷ lục cao nhất của bạn vẫn được giữ nguyên an toàn.</p>
+                <div class="modal-actions">
+                    <button id="btn-confirm-restart-yes" class="btn btn-danger">BẮT ĐẦU MỚI</button>
+                    <button id="btn-confirm-restart-no" class="btn btn-secondary">TIẾP TỤC CHƠI</button>
+                </div>
+            </div>
+        </div>
+
+        <!-- ============================================== -->
+        <!-- 6. HỘP THOẠI CÀI ĐẶT & HƯỚNG DẪN (SETTINGS MODAL) -->
+        <!-- ============================================== -->
+        <div id="modal-settings" class="modal-backdrop hidden" role="dialog" aria-modal="true">
+            <div class="modal-card">
+                <div class="modal-header-row">
+                    <h3 class="modal-title">Cài Đặt & Hướng Dẫn</h3>
+                    <button id="btn-close-settings" class="btn-close-icon" aria-label="Đóng">&times;</button>
+                </div>
+
+                <div class="settings-list">
+                    <div class="setting-item">
+                        <div class="setting-text">
+                            <strong>Âm Thanh Hiệu Ứng</strong>
+                            <span>Gõ gỗ, xóa dòng, combo và kỷ lục</span>
+                        </div>
+                        <label class="toggle-switch">
+                            <input type="checkbox" id="setting-sound-toggle" checked>
+                            <span class="toggle-slider"></span>
+                        </label>
+                    </div>
+                </div>
+
+                <div class="rules-summary">
+                    <h4>Luật chơi TMK BLOCK:</h4>
+                    <ul>
+                        <li>Xếp các khối gỗ vào bàn 8×8 để lấp đầy hàng ngang hoặc cột dọc.</li>
+                        <li>Khi một hoặc nhiều hàng/cột kín, chúng sẽ được xóa ngay lập tức.</li>
+                        <li>Xóa liên tiếp nhiều lượt để tạo <strong>Combo rực lửa</strong> và nhân điểm thưởng!</li>
+                        <li>Vượt mốc <strong>100.000 điểm</strong> để mở khóa thử thách khối gỗ đỉnh cao.</li>
+                        <li>Cơ chế thông minh hỗ trợ giải phóng hàng khi bạn ở tình thế hiểm nghèo.</li>
+                    </ul>
+                </div>
+
+                <div class="modal-actions">
+                    <button id="btn-settings-close-ok" class="btn btn-primary">HIỂU RỒI, CHƠI TIẾP</button>
+                </div>
+            </div>
+        </div>
+
+        <!-- ============================================== -->
+        <!-- 7. THÔNG BÁO VƯỢT MỐC 100.000 ĐIỂM -->
+        <!-- ============================================== -->
+        <div id="modal-milestone-100k" class="modal-backdrop hidden" role="dialog" aria-modal="true">
+            <div class="modal-card milestone-card">
+                <div class="milestone-badge-icon">👑</div>
+                <h2 class="milestone-title">ĐỈNH CAO 100.000 ĐIỂM!</h2>
+                <p class="milestone-desc">Chúc mừng bạn đã chinh phục cột mốc huyền thoại! Giờ đây, game sẽ bước vào giai đoạn <strong>THỬ THÁCH 100K+</strong> với các hình khối gỗ đa dạng và đầy trí tuệ.</p>
+                <button id="btn-close-milestone" class="btn btn-primary btn-pulse">TIẾP TỤC CHINH PHỤC</button>
+            </div>
+        </div>
+
+    </div>
+
+    <!-- KHỞI CHẠY CÁC TẬP TIN JAVASCRIPT THEO THỨ TỰ QUY ĐỊNH -->
+    <script src="js/pieces.js"></script>
+    <script src="js/storage.js"></script>
+    <script src="js/effects.js"></script>
+    <script src="js/game.js"></script>
+    <script src="js/main.js"></script>
+</body>
+</html>
+
