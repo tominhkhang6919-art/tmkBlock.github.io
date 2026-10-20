@@ -75,7 +75,8 @@ document.addEventListener('DOMContentLoaded', () => {
     let draggedGhostEl = null;
     let currentHoverCell = null; // { row, col }
     let rescueToastTimer = null;
-
+    let activePointerId = null;
+    let dragLayout = null;
     // ==========================================
     // 3. KHỞI TẠO BÀN CỜ 8x8 TRÊN DOM
     // ==========================================
@@ -225,7 +226,11 @@ document.addEventListener('DOMContentLoaded', () => {
         isDragging = true;
         activeDragSlotIndex = slotIdx;
         selectedSlotIndex = slotIdx;
-        renderTray(window.tmkGame.trayPieces);
+        document.body.classList.add('is-dragging');
+
+        traySlots.forEach((slot, index) => {
+            slot.classList.toggle('selected', index === slotIdx);
+        });
 
         window.tmkEffects.playTap();
 
@@ -236,14 +241,29 @@ document.addEventListener('DOMContentLoaded', () => {
         draggedGhostEl = document.createElement('div');
         draggedGhostEl.className = 'dragged-piece-ghost';
 
-        const cellSize = cellElements[0][0].getBoundingClientRect().width;
+        const firstCell = cellElements[0][0].getBoundingClientRect();
+        const nextColumn = cellElements[0][1].getBoundingClientRect();
+        const nextRow = cellElements[1][0].getBoundingClientRect();
         const boardStyle = getComputedStyle(gameBoardEl);
+        const gap = parseFloat(boardStyle.columnGap) || 0;
+        const cellSize = firstCell.width;
 
-        draggedGhostEl.style.gap = boardStyle.columnGap;
+        dragLayout = {
+            boardLeft: firstCell.left,
+            boardTop: firstCell.top,
+            columnPitch: nextColumn.left - firstCell.left,
+            rowPitch: nextRow.top - firstCell.top,
+            ghostWidth: piece.width * cellSize + (piece.width - 1) * gap,
+            ghostHeight: piece.height * cellSize + (piece.height - 1) * gap,
+            ghostLeft: 0,
+            ghostTop: 0
+        };
+
         draggedGhostEl.style.gridTemplateColumns =
             `repeat(${piece.width}, ${cellSize}px)`;
         draggedGhostEl.style.gridTemplateRows =
             `repeat(${piece.height}, ${cellSize}px)`;
+        draggedGhostEl.style.gap = `${gap}px`;
 
         for (let r = 0; r < piece.height; r++) {
             for (let c = 0; c < piece.width; c++) {
@@ -266,30 +286,30 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     function updateGhostPosition(clientX, clientY) {
-        if (!draggedGhostEl) return;
+        if (!draggedGhostEl || !dragLayout) return;
 
-        draggedGhostEl.style.left = `${clientX}px`;
-        draggedGhostEl.style.top = `${clientY - dragYOffset}px`;
+        dragLayout.ghostLeft = clientX - dragLayout.ghostWidth / 2;
+        dragLayout.ghostTop =
+            clientY - dragYOffset - dragLayout.ghostHeight * 0.6;
+
+        draggedGhostEl.style.transform =
+            `translate3d(${dragLayout.ghostLeft}px, ${dragLayout.ghostTop}px, 0)`;
 
         highlightPlacementGhost(getDropOriginFromGhost());
     }
 
     function getDropOriginFromGhost() {
-        if (!draggedGhostEl) return null;
-
-        const ghostRect = draggedGhostEl.getBoundingClientRect();
-        const firstCell = cellElements[0][0].getBoundingClientRect();
-        const nextColumn = cellElements[0][1].getBoundingClientRect();
-        const nextRow = cellElements[1][0].getBoundingClientRect();
-
-        const columnPitch = nextColumn.left - firstCell.left;
-        const rowPitch = nextRow.top - firstCell.top;
-
-        if (columnPitch <= 0 || rowPitch <= 0) return null;
+        if (!dragLayout || dragLayout.columnPitch <= 0 || dragLayout.rowPitch <= 0) {
+            return null;
+        }
 
         return {
-            col: Math.round((ghostRect.left - firstCell.left) / columnPitch),
-            row: Math.round((ghostRect.top - firstCell.top) / rowPitch)
+            col: Math.round(
+                (dragLayout.ghostLeft - dragLayout.boardLeft) / dragLayout.columnPitch
+            ),
+            row: Math.round(
+                (dragLayout.ghostTop - dragLayout.boardTop) / dragLayout.rowPitch
+            )
         };
     }
 
@@ -442,72 +462,56 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // Đăng ký sự kiện chuột và cảm ứng cho 3 khay khối
     traySlots.forEach((slotEl, idx) => {
-        // Sự kiện chuột máy tính
-        slotEl.addEventListener('mousedown', (e) => {
-            if (e.button !== 0) return;
-                startDrag(idx, e.clientX, e.clientY, 'mouse');
-        });
+        slotEl.addEventListener('pointerdown', (e) => {
+            if (isDragging) return;
+            if (e.pointerType === 'mouse' && e.button !== 0) return;
 
-        slotEl.addEventListener('touchstart', (e) => {
-            if (e.cancelable) e.preventDefault();
+            const piece = window.tmkGame.trayPieces[idx];
+            if (!piece || piece.used) return;
 
-            const touch = e.touches[0];
-            if (touch) {
-                startDrag(idx, touch.clientX, touch.clientY, 'touch');
-            }
-        }, { passive: false });
+            e.preventDefault();
+            activePointerId = e.pointerId;
+            slotEl.setPointerCapture(e.pointerId);
 
-        // Nhấp chạm chọn
-        slotEl.addEventListener('click', (e) => {
-            // Click chuột/chạm đã được xử lý bởi mousedown/touchstart.
-            // Chỉ giữ click không phát sinh từ con trỏ, ví dụ thao tác bàn phím.
-            if (e.detail === 0) {
-                handleSlotClick(idx);
-            }
+            startDrag(idx, e.clientX, e.clientY, e.pointerType);
         });
     });
 
-    // Sự kiện di chuyển toàn cục
-    window.addEventListener('mousemove', (e) => {
-        if (!isDragging) return;
+    window.addEventListener('pointermove', (e) => {
+        if (!isDragging || e.pointerId !== activePointerId) return;
 
         e.preventDefault();
         queueGhostPosition(e.clientX, e.clientY);
-    });
-
-    window.addEventListener('touchmove', (e) => {
-        if (!isDragging || e.touches.length === 0) return;
-
-        e.preventDefault();
-        const touch = e.touches[0];
-        queueGhostPosition(touch.clientX, touch.clientY);
     }, { passive: false });
 
-    // Sự kiện nhả chuột / kết thúc chạm
-    window.addEventListener('mouseup', (e) => {
-        if (isDragging) {
-            endDrag(e.clientX, e.clientY);
-        }
+    window.addEventListener('pointerup', (e) => {
+        if (!isDragging || e.pointerId !== activePointerId) return;
+
+        activePointerId = null;
+        endDrag(e.clientX, e.clientY);
     });
 
-    window.addEventListener('touchend', (e) => {
-        if (isDragging) {
-            const touch = e.changedTouches[0];
-            endDrag(touch.clientX, touch.clientY);
+    window.addEventListener('pointercancel', (e) => {
+        if (!isDragging || e.pointerId !== activePointerId) return;
+
+        activePointerId = null;
+
+        if (dragFrameId) {
+            cancelAnimationFrame(dragFrameId);
+            dragFrameId = 0;
         }
-    });
 
-    window.addEventListener('touchcancel', () => {
-        if (!isDragging) return;
-
+        pendingDragPoint = null;
         isDragging = false;
         activeDragSlotIndex = null;
+        dragLayout = null;
 
         if (draggedGhostEl?.parentNode) {
             draggedGhostEl.parentNode.removeChild(draggedGhostEl);
         }
-        draggedGhostEl = null;
 
+        draggedGhostEl = null;
+        document.body.classList.remove('is-dragging');
         clearPlacementGhost();
         renderTray(window.tmkGame.trayPieces);
     });
