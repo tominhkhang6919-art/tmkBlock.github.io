@@ -634,6 +634,7 @@ button {
     align-items: center;
     position: relative;
     cursor: grab;
+    touch-action: none;
     transition: background var(--transition-fast), border-color var(--transition-fast), transform var(--transition-fast);
 }
 

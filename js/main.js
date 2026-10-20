@@ -67,6 +67,10 @@ document.addEventListener('DOMContentLoaded', () => {
     // ==========================================
     let selectedSlotIndex = null; // Khối được chọn bằng thao tác chạm (Mobile/Click)
     let isDragging = false;
+    let dragYOffset = 30;
+    let highlightedCells = [];
+    let dragFrameId = 0;
+    let pendingDragPoint = null;
     let activeDragSlotIndex = null;
     let draggedGhostEl = null;
     let currentHoverCell = null; // { row, col }
@@ -212,9 +216,11 @@ document.addEventListener('DOMContentLoaded', () => {
     // ==========================================
     // 6. XỬ LÝ KÉO THẢ (DRAG & DROP - MOUSE & TOUCH)
     // ==========================================
-    function startDrag(slotIdx, clientX, clientY) {
+    function startDrag(slotIdx, clientX, clientY, pointerType = 'mouse') {
         const piece = window.tmkGame.trayPieces[slotIdx];
         if (!piece || piece.used) return;
+
+        dragYOffset = pointerType === 'touch' ? 55 : 30;
 
         isDragging = true;
         activeDragSlotIndex = slotIdx;
@@ -223,32 +229,34 @@ document.addEventListener('DOMContentLoaded', () => {
 
         window.tmkEffects.playTap();
 
-        // Tạo phần tử Ghost bay theo con trỏ chuột/ngón tay
-        if (draggedGhostEl) {
-            document.body.removeChild(draggedGhostEl);
-            draggedGhostEl = null;
+        if (draggedGhostEl?.parentNode) {
+            draggedGhostEl.parentNode.removeChild(draggedGhostEl);
         }
 
         draggedGhostEl = document.createElement('div');
         draggedGhostEl.className = 'dragged-piece-ghost';
 
-        // Lấy kích thước tương đương với kích thước thực trên bàn cờ để người chơi dễ căn chỉnh
-        const boardRect = gameBoardEl.getBoundingClientRect();
-        const cellSize = (boardRect.width - 16 - 7 * 4) / 8; // Kích thước xấp xỉ 1 ô trên bàn cờ
+        const cellSize = cellElements[0][0].getBoundingClientRect().width;
+        const boardStyle = getComputedStyle(gameBoardEl);
 
-        draggedGhostEl.style.gridTemplateColumns = `repeat(${piece.width}, ${cellSize}px)`;
-        draggedGhostEl.style.gridTemplateRows = `repeat(${piece.height}, ${cellSize}px)`;
+        draggedGhostEl.style.gap = boardStyle.columnGap;
+        draggedGhostEl.style.gridTemplateColumns =
+            `repeat(${piece.width}, ${cellSize}px)`;
+        draggedGhostEl.style.gridTemplateRows =
+            `repeat(${piece.height}, ${cellSize}px)`;
 
         for (let r = 0; r < piece.height; r++) {
             for (let c = 0; c < piece.width; c++) {
                 const isOccupied = piece.coords.some(([x, y]) => x === c && y === r);
                 const tile = document.createElement('div');
+
                 if (isOccupied) {
                     tile.className = 'preview-tile';
                     tile.style.background = piece.theme.bg;
                 } else {
                     tile.style.visibility = 'hidden';
                 }
+
                 draggedGhostEl.appendChild(tile);
             }
         }
@@ -259,40 +267,82 @@ document.addEventListener('DOMContentLoaded', () => {
 
     function updateGhostPosition(clientX, clientY) {
         if (!draggedGhostEl) return;
-        draggedGhostEl.style.left = `${clientX}px`;
-        // Trên điện thoại, nâng vị trí khối lên một chút để ngón tay không che khuất
-        const yOffset = ('ontouchstart' in window) ? 55 : 30;
-        draggedGhostEl.style.top = `${clientY - yOffset}px`;
 
-        // Tìm ô trên bàn cờ tương ứng với tâm khối
-        const targetCell = getCellUnderPoint(clientX, clientY - yOffset);
-        highlightPlacementGhost(targetCell);
+        draggedGhostEl.style.left = `${clientX}px`;
+        draggedGhostEl.style.top = `${clientY - dragYOffset}px`;
+
+        highlightPlacementGhost(getDropOriginFromGhost());
+    }
+
+    function getDropOriginFromGhost() {
+        if (!draggedGhostEl) return null;
+
+        const ghostRect = draggedGhostEl.getBoundingClientRect();
+        const firstCell = cellElements[0][0].getBoundingClientRect();
+        const nextColumn = cellElements[0][1].getBoundingClientRect();
+        const nextRow = cellElements[1][0].getBoundingClientRect();
+
+        const columnPitch = nextColumn.left - firstCell.left;
+        const rowPitch = nextRow.top - firstCell.top;
+
+        if (columnPitch <= 0 || rowPitch <= 0) return null;
+
+        return {
+            col: Math.round((ghostRect.left - firstCell.left) / columnPitch),
+            row: Math.round((ghostRect.top - firstCell.top) / rowPitch)
+        };
+    }
+
+    function queueGhostPosition(clientX, clientY) {
+        pendingDragPoint = { x: clientX, y: clientY };
+
+        if (dragFrameId) return;
+
+        dragFrameId = requestAnimationFrame(() => {
+            dragFrameId = 0;
+
+            if (!isDragging || !pendingDragPoint) return;
+
+            const point = pendingDragPoint;
+            pendingDragPoint = null;
+            updateGhostPosition(point.x, point.y);
+        });
     }
 
     function endDrag(clientX, clientY) {
         if (!isDragging) return;
-        isDragging = false;
 
+        if (dragFrameId) {
+            cancelAnimationFrame(dragFrameId);
+            dragFrameId = 0;
+        }
+        pendingDragPoint = null;
+
+        // Cập nhật theo đúng vị trí nhả cuối cùng, tránh dùng frame cũ.
+        updateGhostPosition(clientX, clientY);
+        const dropOrigin = getDropOriginFromGhost();
+
+        isDragging = false;
         const slotIdx = activeDragSlotIndex;
         activeDragSlotIndex = null;
 
-        if (draggedGhostEl) {
-            document.body.removeChild(draggedGhostEl);
-            draggedGhostEl = null;
+        if (draggedGhostEl?.parentNode) {
+            draggedGhostEl.parentNode.removeChild(draggedGhostEl);
         }
+        draggedGhostEl = null;
 
         clearPlacementGhost();
 
-        const yOffset = ('ontouchstart' in window) ? 55 : 30;
-        const targetCell = getCellUnderPoint(clientX, clientY - yOffset);
-
-        if (targetCell && slotIdx !== null) {
+        if (dropOrigin && slotIdx !== null) {
             const piece = window.tmkGame.trayPieces[slotIdx];
+
             if (piece && !piece.used) {
-                // Thử đặt khối với gốc tại vị trí con trỏ
-                const r = targetCell.row;
-                const c = targetCell.col;
-                const result = window.tmkGame.placePiece(piece, r, c);
+                const result = window.tmkGame.placePiece(
+                    piece,
+                    dropOrigin.row,
+                    dropOrigin.col
+                );
+
                 if (result.success) {
                     window.tmkEffects.playPlace();
                     selectedSlotIndex = null;
@@ -301,49 +351,52 @@ document.addEventListener('DOMContentLoaded', () => {
             }
         }
 
-        // Nếu thả không hợp lệ hoặc ra ngoài, giữ nguyên trạng thái
         renderTray(window.tmkGame.trayPieces);
     }
 
-    function getCellUnderPoint(x, y) {
-        const target = document.elementFromPoint(x, y);
-        const cell = target?.closest('.grid-cell');
-
-        if (!cell || !gameBoardEl.contains(cell)) {
-            return null;
-        }
-
-        return {
-            row: Number(cell.dataset.row),
-            col: Number(cell.dataset.col)
-        };
-    }
 
     function highlightPlacementGhost(targetCell) {
+        if (
+            targetCell &&
+            currentHoverCell &&
+            targetCell.row === currentHoverCell.row &&
+            targetCell.col === currentHoverCell.col
+        ) {
+            return;
+        }
+
         clearPlacementGhost();
+
         if (!targetCell || activeDragSlotIndex === null) return;
 
         const piece = window.tmkGame.trayPieces[activeDragSlotIndex];
         if (!piece || piece.used) return;
 
-        const canPlace = window.tmkGame.canPlacePiece(piece, targetCell.row, targetCell.col);
-        if (canPlace) {
-            piece.coords.forEach(([dx, dy]) => {
-                const r = targetCell.row + dy;
-                const c = targetCell.col + dx;
-                if (r < BOARD_SIZE && c < BOARD_SIZE && cellElements[r] && cellElements[r][c]) {
-                    cellElements[r][c].classList.add('ghost-valid');
-                }
-            });
+        currentHoverCell = { row: targetCell.row, col: targetCell.col };
+
+        if (!window.tmkGame.canPlacePiece(piece, targetCell.row, targetCell.col)) {
+            return;
         }
+
+        piece.coords.forEach(([dx, dy]) => {
+            const row = targetCell.row + dy;
+            const col = targetCell.col + dx;
+            const cell = cellElements[row]?.[col];
+
+            if (cell) {
+                cell.classList.add('ghost-valid');
+                highlightedCells.push(cell);
+            }
+        });
     }
 
     function clearPlacementGhost() {
-        for (let r = 0; r < BOARD_SIZE; r++) {
-            for (let c = 0; c < BOARD_SIZE; c++) {
-                cellElements[r][c].classList.remove('ghost-valid');
-            }
-        }
+        highlightedCells.forEach(cell => {
+            cell.classList.remove('ghost-valid');
+        });
+
+        highlightedCells = [];
+        currentHoverCell = null;
     }
 
     // ==========================================
@@ -391,15 +444,16 @@ document.addEventListener('DOMContentLoaded', () => {
     traySlots.forEach((slotEl, idx) => {
         // Sự kiện chuột máy tính
         slotEl.addEventListener('mousedown', (e) => {
-            if (e.button !== 0) return; // Chỉ nhận chuột trái
-            startDrag(idx, e.clientX, e.clientY);
+            if (e.button !== 0) return;
+                startDrag(idx, e.clientX, e.clientY, 'mouse');
         });
 
-        // Sự kiện chạm điện thoại
         slotEl.addEventListener('touchstart', (e) => {
-            if (e.touches.length > 0) {
-                const touch = e.touches[0];
-                startDrag(idx, touch.clientX, touch.clientY);
+            if (e.cancelable) e.preventDefault();
+
+            const touch = e.touches[0];
+            if (touch) {
+                startDrag(idx, touch.clientX, touch.clientY, 'touch');
             }
         }, { passive: false });
 
@@ -415,18 +469,18 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // Sự kiện di chuyển toàn cục
     window.addEventListener('mousemove', (e) => {
-        if (isDragging) {
-            e.preventDefault();
-            updateGhostPosition(e.clientX, e.clientY);
-        }
+        if (!isDragging) return;
+
+        e.preventDefault();
+        queueGhostPosition(e.clientX, e.clientY);
     });
 
     window.addEventListener('touchmove', (e) => {
-        if (isDragging && e.touches.length > 0) {
-            e.preventDefault(); // Ngăn cuộn trang khi đang kéo khối
-            const touch = e.touches[0];
-            updateGhostPosition(touch.clientX, touch.clientY);
-        }
+        if (!isDragging || e.touches.length === 0) return;
+
+        e.preventDefault();
+        const touch = e.touches[0];
+        queueGhostPosition(touch.clientX, touch.clientY);
     }, { passive: false });
 
     // Sự kiện nhả chuột / kết thúc chạm
