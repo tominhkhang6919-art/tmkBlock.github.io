@@ -602,6 +602,9 @@ class TMKGame {
      * Giải phóng 1 hàng hoặc cột đông đúc nhất kèm hiệu ứng âm thanh & thông báo rõ ràng cho người chơi.
      */
     triggerRescueMechanic() {
+        if (this.rescueUsedCount >= 5) return false;
+            this.rescueUsedCount++;
+            
         this.rescueUsedCount++;
 
         // Tìm hàng có nhiều ô bị chiếm nhất để giải phóng
